@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 运行产物
+raw.csv
+sum.csv
+chan5g_report_*.html
+_exp_test.html
+
+# 临时截图 / 调试
+_*.png
+*.log
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
