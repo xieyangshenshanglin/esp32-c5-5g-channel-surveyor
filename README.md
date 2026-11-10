@@ -2,6 +2,10 @@
 
 把一块 **ESP32-C5** 变成手持 Wi-Fi 现场勘查仪：扫出周围所有接入点，算出 5GHz 哪个信道最干净，告诉你路由器该改到哪，并量化改前改后的差异。
 
+> **在线版（免安装）**
+> 项目主页 <https://xieyangshenshanglin.github.io/esp32-c5-5g-channel-surveyor/>
+> 网页烧录台 <https://xieyangshenshanglin.github.io/esp32-c5-5g-channel-surveyor/flasher.html> —— Chrome/Edge 打开，插上板子就能刷固件，不用装 Python 和 esptool
+
 ![界面](界面截图.png)
 
 ## 解决什么问题
