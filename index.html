@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32-C5 5GHz 信道普查仪</title>
+<style>
+:root{
+  --bg:#0a0e13; --card:#121a22; --line:#223040; --fg:#d8e3ee; --dim:#8798a8;
+  --accent:#35e0c8; --accent2:#2aa79b; --ok:#79e6cf;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:radial-gradient(1200px 600px at 20% -10%,#16232f 0%,var(--bg) 60%) fixed;
+  color:var(--fg);
+  font:15px/1.7 -apple-system,"Segoe UI","Microsoft YaHei",Roboto,sans-serif;
+  padding:28px 18px 60px;
+}
+.wrap{max-width:960px;margin:0 auto}
+.mono{font-family:"Cascadia Mono",Consolas,"Courier New",monospace}
+
+header{display:flex;align-items:center;gap:11px;margin-bottom:8px}
+.dot{width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 16px var(--accent)}
+h1{font-size:24px;margin:0;letter-spacing:.4px}
+.sub{color:var(--dim);font-size:13px;margin:0 0 26px}
+
+.cta{display:flex;gap:12px;flex-wrap:wrap;margin:0 0 28px}
+a.btn{
+  flex:1 1 240px;text-align:center;text-decoration:none;padding:15px 18px;border-radius:12px;
+  font-weight:700;font-size:15px;border:1px solid var(--line);color:var(--fg);
+  background:#16222c;transition:.15s;
+}
+a.btn:hover{border-color:var(--accent2);color:#fff}
+a.btn.primary{
+  background:linear-gradient(180deg,#2fbfae 0%,#1f9488 100%);
+  border-color:#2fbfae;color:#04140f;
+}
+a.btn small{display:block;font-weight:400;font-size:12px;opacity:.75;margin-top:3px}
+
+section.card{
+  background:linear-gradient(180deg,var(--card) 0%,#101821 100%);
+  border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin:0 0 16px;
+  box-shadow:0 10px 30px -18px #000;
+}
+h2{font-size:15px;margin:0 0 12px;display:flex;align-items:center;gap:9px}
+h2 .n{width:20px;height:20px;border-radius:6px;display:inline-grid;place-items:center;
+  background:#1b2a36;color:var(--accent);font-size:12px;font-weight:700}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--dim);font-weight:600;font-size:12.5px}
+td:first-child{white-space:nowrap;color:var(--fg)}
+tr:last-child td{border-bottom:none}
+code{background:#0c141b;border:1px solid var(--line);border-radius:5px;padding:1px 5px;font-size:12.5px}
+
+.shot{width:100%;border-radius:10px;border:1px solid var(--line);display:block}
+.cap{color:var(--dim);font-size:12.5px;margin:9px 0 0}
+
+ul.feat{margin:0;padding-left:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px 22px;font-size:13.5px}
+ul.feat li{position:relative;padding-left:20px;color:var(--dim)}
+ul.feat li::before{content:"▸";position:absolute;left:2px;color:var(--accent)}
+ul.feat b{color:var(--fg);font-weight:600}
+
+footer{color:var(--dim);font-size:12.5px;text-align:center;margin-top:34px}
+footer a{color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header><span class="dot"></span><h1>ESP32-C5 5GHz 信道普查仪</h1></header>
+<p class="sub">扫出周围所有 Wi-Fi AP · 算出 5GHz 哪个信道最干净 · 改信道前后做量化对比</p>
+
+<div class="cta">
+  <a class="btn primary" href="flasher.html">在线烧录固件<small>浏览器直接刷，不用装 Python / esptool</small></a>
+  <a class="btn" href="README.md">使用说明<small>11 章完整文档，含 25 条故障排查</small></a>
+</div>
+
+<section class="card">
+  <h2><span class="n">1</span>在浏览器里直接刷固件</h2>
+  <p style="margin:0 0 12px;color:var(--dim);font-size:13.5px">
+    打开 <a href="flasher.html" style="color:var(--accent)">烧录台</a> → 连开发板 → 选 <code>firmware/Bruce-c5-n32r8-chan5g.bin</code> → 开始烧录。
+    用的是浏览器自带的 Web Serial，固件只在你电脑内存里直写芯片，不上传任何服务器。
+    需要 Chrome / Edge（Safari、Firefox 不支持 Web Serial）。
+  </p>
+  <table>
+    <thead><tr><th>方式</th><th>需要装什么</th><th>适合</th></tr></thead>
+    <tbody>
+      <tr><td>网页烧录台</td><td>只要 Chrome / Edge</td><td>第一次用、不想碰命令行</td></tr>
+      <tr><td><code>firmware/刷机.bat</code></td><td>Python + esptool</td><td>要批量刷、或网页版握手失败</td></tr>
+      <tr><td>命令行 esptool</td><td>Python + esptool</td><td>自动化、CI</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h2><span class="n">2</span>界面长这样</h2>
+  <img class="shot" src="界面截图.png" alt="信道普查仪界面">
+  <p class="cap">左边 5GHz 25 个信道，蓝框是推荐信道；右边 2.4GHz。双击表格里属于你自己的那一行，把它标成「你的 AP」，统计时就会把它排除，只看邻居。</p>
+</section>
+
+<section class="card">
+  <h2><span class="n">3</span>它解决什么问题</h2>
+  <ul class="feat">
+    <li><b>高峰期卡</b>——到底是不是因为邻居挤在同一信道</li>
+    <li><b>信道怎么选</b>——36 还是 149，硬件差异在哪</li>
+    <li><b>改完有没有用</b>——改前存基线，改后一对比</li>
+    <li><b>时间规律</b>——挂着跑一晚上，看晚上 8-11 点怎么变</li>
+  </ul>
+  <p class="cap">手机 App 做不到这些：系统只返回连过的和信号强的 AP。ESP32 是主动全信道扫描，一次 40+ 个接入点，2.4G 和 5G 一起扫。</p>
+</section>
+
+<section class="card">
+  <h2><span class="n">4</span>关键设计</h2>
+  <table>
+    <thead><tr><th>设计</th><th>为什么</th></tr></thead>
+    <tbody>
+      <tr><td>加权干扰分</td><td>不是数 AP 个数。一个 -40dBm 的隔壁路由器，比十个 -90dBm 的远邻居更值得躲</td></tr>
+      <tr><td>四阶段判定</td><td>80MHz 的带宽收益远大于躲信道。所以先试整块 80MHz，其次 40，再其次 20，DFS 是最后选项</td></tr>
+      <tr><td>排除自己</td><td>搬到一个空房间，不能说"这房间被我占了所以很挤"。标记自己的 AP 后统计时摘掉</td></tr>
+      <tr><td>-75dBm 门限</td><td>隔两堵墙的 -85dBm 邻居在整段 80MHz 里几乎没有影响，为它放弃整段频谱不值</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  固件基于 <a href="https://github.com/pr3y/Bruce">Bruce</a> 修改，修复了无屏 C5 板上 JS 解释器无法启动的三个 bug ·
+  <a href="源码改动说明.md">源码改动说明</a> ·
+  <a href="改信道操作卡.md">改信道操作卡</a>
+</footer>
+
+</div>
+</body>
+</html>

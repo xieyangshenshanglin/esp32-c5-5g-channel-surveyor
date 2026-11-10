@@ -1,0 +1,1512 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP32-C5 一键烧录台（单文件版）</title>
+<style>
+/* 单文件烧录台的样式（会被 build-standalone.mjs 内联进 HTML） */
+:root {
+  --bg: #0a0e13;
+  --card: #121a22;
+  --card2: #16202a;
+  --line: #223040;
+  --fg: #d8e3ee;
+  --dim: #8798a8;
+  --accent: #35e0c8;
+  --accent2: #2aa79b;
+  --warn: #f0c982;
+  --err: #ff9d9d;
+  --ok: #79e6cf;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: radial-gradient(1200px 600px at 20% -10%, #16232f 0%, var(--bg) 60%) fixed;
+  color: var(--fg);
+  font: 14px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif;
+  padding: 18px 16px 40px;
+}
+.mono, code, pre { font-family: "Cascadia Mono", Consolas, "Courier New", monospace; }
+
+.top { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; max-width: 1080px; margin: 0 auto 14px; }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 17px; letter-spacing: .3px; }
+.brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px var(--accent); }
+.brand .sub { color: var(--dim); font-size: 12px; font-weight: 400; }
+.tags { display: flex; gap: 8px; flex-wrap: wrap; }
+.tag {
+  font-size: 11.5px; padding: 3px 10px; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--dim); background: #0e161d;
+}
+.tag.good { color: var(--ok); border-color: #1e4d45; background: #0d1f1c; }
+.tag.bad { color: var(--err); border-color: #4d2a2a; background: #1f1010; }
+
+.banner {
+  max-width: 1080px; margin: 0 auto 14px; padding: 11px 14px; border-radius: 10px;
+  border: 1px solid #4d2a2a; background: #1d1113; color: var(--err); font-size: 13px;
+}
+.banner[data-kind="warn"] { border-color: #4d422a; background: #1d1a11; color: var(--warn); }
+.banner[data-kind="ok"] { border-color: #1e4d45; background: #0d1f1c; color: var(--ok); }
+.banner a { color: var(--accent); }
+
+main { max-width: 1080px; margin: 0 auto; display: grid; gap: 14px; }
+.card {
+  background: linear-gradient(180deg, var(--card) 0%, #101821 100%);
+  border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px;
+  box-shadow: 0 10px 30px -18px #000;
+}
+.card h2 { display: flex; align-items: center; gap: 9px; margin: 0 0 12px; font-size: 14.5px; font-weight: 600; letter-spacing: .4px; }
+.card h2 .n {
+  width: 20px; height: 20px; border-radius: 6px; display: inline-grid; place-items: center;
+  background: #1b2a36; color: var(--accent); font-size: 12px; font-weight: 700;
+}
+
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 170px; }
+.field > span { color: var(--dim); font-size: 12px; }
+select, input {
+  background: #0c141b; color: var(--fg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 9px 10px; font: inherit; outline: none;
+}
+select:focus, input:focus { border-color: var(--accent2); box-shadow: 0 0 0 3px #35e0c820; }
+input:disabled { color: var(--dim); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--dim); padding-bottom: 8px; }
+.check input { width: 16px; height: 16px; accent-color: var(--accent2); }
+
+.btns { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0 8px; }
+.btn {
+  flex: 1 1 160px; padding: 11px 14px; border-radius: 10px; cursor: pointer;
+  background: #16222c; color: var(--fg); border: 1px solid var(--line);
+  font: inherit; font-weight: 600; transition: .15s;
+}
+.btn:hover:not(:disabled) { border-color: var(--accent2); color: #fff; }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn.primary { background: linear-gradient(180deg, #2fbfae 0%, #1f9488 100%); border-color: #2fbfae; color: #04140f; }
+.btn.big { flex: 2 1 220px; }
+.link { background: none; border: none; color: var(--accent); cursor: pointer; font: inherit; padding: 0; text-decoration: underline; }
+.link.small { font-size: 12px; }
+
+.hint { color: var(--dim); font-size: 12.5px; margin: 8px 0 0; }
+.hint b { color: var(--fg); font-weight: 600; }
+.hint.mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12.5px; color: #a9bccd; }
+
+.drop {
+  border: 1.5px dashed #2a3c4c; border-radius: 12px; padding: 22px 14px; text-align: center;
+  background: #0d151c; transition: .15s;
+}
+.drop.hover { border-color: var(--accent); background: #0e1c1e; }
+.drop-main { margin: 0 0 6px; }
+.drop-sub { margin: 0; color: var(--dim); font-size: 12px; }
+.drop code { background: #16222c; padding: 1px 5px; border-radius: 4px; }
+
+.meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px 18px; margin: 12px 0 4px; }
+.meta > div { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+.meta dt { color: var(--dim); font-size: 12px; min-width: 52px; }
+.meta dd { margin: 0; font-size: 12.5px; overflow-wrap: anywhere; }
+
+.prog { margin: 6px 0 12px; }
+.bar { height: 10px; border-radius: 999px; background: #0b1319; border: 1px solid var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width .12s linear; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 10px; }
+.stats div { background: #0d151c; border: 1px solid var(--line); border-radius: 9px; padding: 7px 10px; display: flex; justify-content: space-between; gap: 8px; }
+.stats span { color: var(--dim); font-size: 12px; }
+.stats b { font-size: 13px; font-variant-numeric: tabular-nums; }
+
+.log-head { display: flex; justify-content: space-between; align-items: center; color: var(--dim); font-size: 12px; margin-bottom: 6px; }
+.log {
+  margin: 0; height: 220px; overflow: auto; background: #080d12; border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 12px; font-size: 12px; line-height: 1.65; white-space: pre-wrap;
+}
+.log .t { color: #5d7183; }
+.log .ok { color: var(--ok); }
+.log .warn { color: var(--warn); }
+.log .err { color: var(--err); }
+.log .info { color: #9fb3c4; }
+
+.faq table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.faq th, .faq td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.faq th { color: var(--dim); font-weight: 600; font-size: 12px; }
+.faq td:first-child { color: var(--fg); white-space: nowrap; }
+.faq td:last-child { color: var(--dim); }
+.faq code { background: #16222c; padding: 1px 5px; border-radius: 4px; }
+
+.foot { max-width: 1080px; margin: 18px auto 0; color: #5d7183; font-size: 11.5px; text-align: center; }
+
+@media (max-width: 620px) {
+  .stats { grid-template-columns: 1fr 1fr; }
+  .faq td:first-child { white-space: normal; }
+  .log { height: 180px; }
+}
+
+button:disabled, .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><span class="dot"></span><b>ESP32-C5 烧录台</b><span class="sub">单文件版 · 双击打开即用 · 不需要装任何东西</span></div>
+  <div class="tags">
+    <span class="tag" id="tag-browser">浏览器检测中</span>
+    <span class="tag" id="tag-serial">串口检测中</span>
+    <span class="tag" id="tag-secure">安全上下文</span>
+  </div>
+</header>
+
+<div class="banner" id="banner" hidden></div>
+
+<main>
+  <section class="card">
+    <h2><span class="n">1</span>连接开发板</h2>
+    <div class="row">
+      <label class="field">
+        <span>波特率</span>
+        <select id="baud">
+          <option value="460800" selected>460800（推荐）</option>
+          <option value="921600">921600（更快，线差会丢包）</option>
+          <option value="115200">115200（最保险，很慢）</option>
+        </select>
+      </label>
+      <label class="check"><input type="checkbox" id="autoreset" checked><span>连接时自动进下载模式（DTR/RTS，不需要手按 BOOT）</span></label>
+    </div>
+    <div class="btns">
+      <button id="btn-connect" class="btn primary">选择串口并连接</button>
+      <button id="btn-disconnect" class="btn" disabled>断开</button>
+    </div>
+    <p class="hint mono" id="port-info">端口：未连接</p>
+    <p class="hint">用 Chrome 或 Edge 打开本文件。第一次点连接会弹出串口列表：选带 <b>CH343 / CH340 / USB 串行设备</b> 的那个；如果列表是空的，先确认数据线能传数据（很多线只能充电）、驱动装了没有。</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">2</span>选择固件</h2>
+    <div class="drop" id="drop">
+      <p class="drop-main">把 <b>.bin</b> 拖到这里，或 <button id="btn-pick" class="link">选择文件</button></p>
+      <p class="drop-sub">整片合并镜像写 <code>0x0</code>；单个 app 分区镜像写 <code>0x10000</code>（会自动判断）</p>
+      <input type="file" id="file" accept=".bin,application/octet-stream" hidden>
+    </div>
+    <dl class="meta">
+      <div><dt>文件</dt><dd id="meta-name">—</dd></div>
+      <div><dt>大小</dt><dd id="meta-size">—</dd></div>
+      <div><dt>SHA-256</dt><dd id="meta-sha" class="mono">—</dd></div>
+    </dl>
+    <div class="row">
+      <label class="field">
+        <span>烧录地址</span>
+        <input id="offset" value="0x0" spellcheck="false">
+      </label>
+      <label class="field">
+        <span>芯片</span>
+        <input value="ESP32-C5" disabled>
+      </label>
+      <label class="check"><input type="checkbox" id="run" checked><span>烧完自动复位运行</span></label>
+    </div>
+    <p class="hint" id="offset-hint">还没选固件。</p>
+  </section>
+
+  <section class="card">
+    <h2><span class="n">3</span>开始烧录</h2>
+    <div class="btns">
+      <button id="btn-flash" class="btn primary big">开始烧录</button>
+      <button id="btn-abort" class="btn" disabled>中止</button>
+    </div>
+    <div class="prog">
+      <div class="bar"><i id="bar"></i></div>
+      <div class="stats">
+        <div><span>进度</span><b id="st-pct">0.0 %</b></div>
+        <div><span>速率</span><b id="st-rate">—</b></div>
+        <div><span>已写</span><b id="st-sent">0 B</b></div>
+        <div><span>包</span><b id="st-pkt">0 / 0</b></div>
+        <div><span>剩余</span><b id="st-eta">—</b></div>
+      </div>
+    </div>
+    <div class="log-head"><span>日志</span><button id="btn-clear" class="link small">清空</button></div>
+    <pre class="log" id="log"></pre>
+  </section>
+
+  <section class="card faq">
+    <h2><span class="n">?</span>打不开 / 烧不进 怎么办</h2>
+    <table>
+      <thead><tr><th>现象</th><th>原因与处理</th></tr></thead>
+      <tbody>
+        <tr><td>双击后是纯文本 / 代码</td><td>右键 → 打开方式 → Chrome 或 Edge。别用 IE、别用记事本。</td></tr>
+        <tr><td>点连接没有任何弹窗</td><td>页面被嵌在别的窗口/iframe 里了。把本文件单独用浏览器打开（地址栏应是 <code>file:///…</code>）。</td></tr>
+        <tr><td>列表里没有你的板子</td><td>线只充电不能传数据 / 驱动没装（CH340、CH343 装 CH341SER）/ 换个 USB 口。</td></tr>
+        <tr><td>打开串口失败：拒绝访问</td><td>被别的程序占着：串口助手（sscom、XCOM）、Arduino 串口监视器、另一个浏览器标签页。全关掉再点连接。</td></tr>
+        <tr><td>卡在 SYNC 握手失败</td><td>① 勾着"自动进下载模式"就点连接，别手按 BOOT；② 手按 BOOT → 点一下 RST → 松开 BOOT 再重试；③ TX/RX 两根都要接（只接 TX 能看日志，握不上手）；④ 降到 115200。</td></tr>
+        <tr><td>写到一半报校验和错误</td><td>线太长/杜邦线接触不良，或这个波特率它撑不住 → 降到 460800 或 115200 重试。</td></tr>
+        <tr><td>烧完还是老程序</td><td>烧错文件了。核对「大小」与文件：整片镜像约 1.1 MB，Bruce 那种约 3.9 MB，别混。</td></tr>
+        <tr><td>烧完没反应 / 要重插</td><td>拔插一次 USB，或按一下 RST。原生 USB 口（303A）复位后会重新枚举。</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">本页不联网、不上传任何东西：固件只在你电脑的内存里，通过串口直接写进芯片。</p>
+  </section>
+</main>
+
+<footer class="foot">单文件烧录台 · Web Serial + 自实现 ESP ROM 协议 · 无依赖 · 不需要 Node/Python</footer>
+
+<script>
+(function () {
+'use strict';
+/* ===== src/slip.js ===== */
+// SLIP 编码/解码 —— 无依赖纯逻辑，浏览器与 node 共用
+// ESP ROM 串口下载协议用 SLIP 帧：0xC0 定界，0xDB 转义
+const SLIP = { END: 0xc0, ESC: 0xdb, ESC_END: 0xdc, ESC_ESC: 0xdd };
+
+/** 把原始字节封装成一个 SLIP 帧（含首尾 0xC0） */
+function slipEncode(bytes) {
+  const out = [SLIP.END];
+  for (const b of bytes) {
+    if (b === SLIP.END) out.push(SLIP.ESC, SLIP.ESC_END);
+    else if (b === SLIP.ESC) out.push(SLIP.ESC, SLIP.ESC_ESC);
+    else out.push(b);
+  }
+  out.push(SLIP.END);
+  return Uint8Array.from(out);
+}
+
+/** 流式解码器：可被任意切分的 chunk 调用，也能容忍半个转义序列跨 chunk */
+class SlipDecoder {
+  constructor() {
+    this.cur = [];
+    this.esc = false;
+    this.done = [];
+  }
+
+  /** @param {Uint8Array} chunk @returns {Uint8Array[]} 本次解出的完整帧 */
+  push(chunk) {
+    for (const b of chunk) {
+      if (b === SLIP.END) {
+        if (this.cur.length) {
+          this.done.push(Uint8Array.from(this.cur));
+          this.cur = [];
+        }
+        this.esc = false;
+        continue;
+      }
+      if (this.esc) {
+        if (b === SLIP.ESC_END) this.cur.push(SLIP.END);
+        else if (b === SLIP.ESC_ESC) this.cur.push(SLIP.ESC);
+        else this.cur.push(b); // 容错：非法转义按原字节处理
+        this.esc = false;
+      } else if (b === SLIP.ESC) {
+        this.esc = true;
+      } else {
+        this.cur.push(b);
+      }
+    }
+    const out = this.done;
+    this.done = [];
+    return out;
+  }
+
+  /** 清空未完成的半帧（重连/重试时用） */
+  reset() {
+    this.cur = [];
+    this.esc = false;
+    this.done = [];
+  }
+}
+
+
+/* ===== src/esptool-lite.js ===== */
+// ESP 串口 ROM 下载协议的最小实现（不用 esptool-js，零依赖，可跑在浏览器和 node）
+// 参考协议：ESP32/ESP32-C3/C5/C6 系列 ROM bootloader 的 serial protocol
+// 帧格式：0x00|op|len(2,LE)|checksum(4,LE)|payload(变长)，整体 SLIP 封装
+// 校验：从 0xEF 起逐字节 XOR
+
+const OP = {
+  FLASH_BEGIN: 0x02,
+  FLASH_DATA: 0x03,
+  FLASH_END: 0x04,
+  SYNC: 0x08,
+  WRITE_REG: 0x09,
+  READ_REG: 0x0a,
+  READ_FLASH: 0x10,
+  CHANGE_BAUD: 0x0f,
+  SPI_FLASH_MD5: 0x13,
+};
+
+const DIR = { REQUEST: 0x00, RESPONSE: 0x01 };
+
+/** ROM 的已知错误码（真机 ack 的 value 字段常带脏数据，不能见非 0 就当错） */
+const ROM_ERROR_CODES = new Set([
+  0x05, 0x06, 0x07, 0x08, 0x09,
+  0xc0, 0xc1, 0xc2, 0xc3, 0xc4, 0xc5, 0xc6, 0xc7, 0xc8, 0xc9, 0xca, 0xcb, 0xcc, 0xcd, 0xce, 0xcf,
+  0xfe, 0xff,
+]);
+
+/** ROM 校验和：种子 0xEF，逐字节 XOR（命令包与 FLASH_DATA 数据块都用它） */
+function checksum(bytes) {
+  let c = 0xef;
+  for (const b of bytes) c ^= b;
+  return c >>> 0;
+}
+
+/** 拼一个命令包并 SLIP 封装 */
+function buildCommand(op, payload) {
+  const n = payload.length;
+  const cs = checksum(payload);
+  const head = Uint8Array.from([
+    DIR.REQUEST, op, n & 0xff, (n >> 8) & 0xff,
+    cs & 0xff, (cs >> 8) & 0xff, (cs >> 16) & 0xff, (cs >> 24) & 0xff,
+  ]);
+  const out = new Uint8Array(head.length + n);
+  out.set(head, 0);
+  out.set(payload, head.length);
+  return slipEncode(out);
+}
+
+/** 拼一个响应包（模拟设备用） */
+function buildResponse(op, value, body = new Uint8Array(0)) {
+  const n = body.length;
+  const head = Uint8Array.from([
+    DIR.RESPONSE, op, n & 0xff, (n >> 8) & 0xff,
+    value & 0xff, (value >> 8) & 0xff, (value >> 16) & 0xff, (value >> 24) & 0xff,
+  ]);
+  const out = new Uint8Array(head.length + n);
+  out.set(head, 0);
+  out.set(body, head.length);
+  return slipEncode(out);
+}
+
+function toHex(n, width = 6) {
+  return '0x' + n.toString(16).toUpperCase().padStart(width, '0');
+}
+
+/** 4 字节对齐填充（0xFF，与 esptool 的 pad_to 行为一致） */
+function padTo(data, align, fill = 0xff) {
+  const rem = data.length % align;
+  if (!rem) return data;
+  const out = new Uint8Array(data.length + (align - rem));
+  out.set(data, 0);
+  out.fill(fill, data.length);
+  return out;
+}
+
+const SYNC_PAYLOAD = Uint8Array.from([0x07, 0x07, 0x12, 0x20, ...new Array(32).fill(0x55)]);
+
+/**
+ * ROM 下载器。
+ * transport 需要实现：write(Uint8Array):Promise<void> / read(timeoutMs):Promise<Uint8Array> / close():Promise<void>
+ */
+class EspLoader {
+  constructor(transport, opts = {}) {
+    this.transport = transport;
+    this.decoder = new SlipDecoder();
+    this.queue = [];
+    this.timeout = opts.timeout ?? 5000;
+    this.syncTimeout = opts.syncTimeout ?? 1200;
+    this.log = opts.log ?? (() => {});
+    this.aborted = false;
+  }
+
+  abort() { this.aborted = true; }
+
+  async _nextFrame(timeoutMs) {
+    if (this.queue.length) return this.queue.shift();
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      let chunk;
+      try {
+        chunk = await this.transport.read(Math.max(1, deadline - Date.now()));
+      } catch (e) {
+        break; // 超时或读失败，落到下面统一报超时
+      }
+      if (chunk && chunk.length) {
+        this.queue.push(...this.decoder.push(chunk));
+        if (this.queue.length) return this.queue.shift();
+      }
+    }
+    throw new Error('TIMEOUT: 等待设备响应超时（检查波特率 / 是否进了下载模式）');
+  }
+
+  _parse(frame, expectOp) {
+    if (frame.length < 8) throw new Error(`响应帧过短（${frame.length} B）`);
+    if (frame[0] !== DIR.RESPONSE) {
+      throw new Error(`响应方向非法：0x${frame[0].toString(16)}`);
+    }
+    const op = frame[1];
+    const len = frame[2] | (frame[3] << 8);
+    const val = (frame[4] | (frame[5] << 8) | (frame[6] << 16) | (frame[7] << 24)) >>> 0;
+    const body = frame.slice(8, 8 + len);
+    if (op !== expectOp) {
+      throw new Error(`响应 op 不匹配：期望 0x${expectOp.toString(16)}，收到 0x${op.toString(16)}`);
+    }
+    return { val, body };
+  }
+
+  async command(op, payload = new Uint8Array(0), opts = {}) {
+    const timeout = opts.timeout ?? this.timeout;
+    await this.transport.write(buildCommand(op, payload));
+    // 真 ROM 会为每个 SYNC 各回一帧，握手后常有几个迟到的 ack 残留，
+    // 所以这里允许跳过 op 不匹配的帧（最多跳 6 个，避免死循环）。
+    let frame = null;
+    for (let guard = 0; guard < 6; guard++) {
+      const f = await this._nextFrame(timeout);
+      if (f.length >= 2 && f[1] === op) { frame = f; break; }
+      this.log(`跳过残留帧 op=0x${(f[1] || 0).toString(16)}（期望 0x${op.toString(16)}）`, 'warn');
+    }
+    if (!frame) throw new Error(`没有收到 op 0x${op.toString(16)} 的响应`);
+    const { val, body } = this._parse(frame, op);
+    if (val !== 0) {
+      const text = new TextDecoder().decode(body).replace(/\0/g, '').trim();
+      const printable = text.length >= 3 && /^[\x20-\x7e]+$/.test(text);
+      // 真机 ESP32-C5 的 ack 里 value 字段是脏的（例如 0x20120707 是 SYNC magic），
+      // 只有 value 命中已知错误码、或 body 是明文错误信息时才算失败。
+      if (ROM_ERROR_CODES.has(val) || printable) {
+        const hex = Array.from(frame, (b) => b.toString(16).padStart(2, '0')).join(' ');
+        const err = new Error(`设备返回错误 0x${val.toString(16).toUpperCase()}${text ? '：' + text : ''}（帧 ${hex}）`);
+        err.code = val;
+        err.body = body;
+        err.frame = frame;
+        throw err;
+      }
+    }
+    return { val, body };
+  }
+
+  /** 握手：发送 SYNC，设备回 0x07 0x07 0x12 0x20（真 ROM 放在 value 字段，模拟器放在 body） */
+  async sync(attempts = 7) {
+    for (let i = 0; i < attempts; i++) {
+      if (this.aborted) throw new Error('ABORT: 已取消');
+      this.decoder.reset();
+      this.queue = [];
+      try {
+        await this.transport.write(buildCommand(OP.SYNC, SYNC_PAYLOAD));
+        const frame = await this._nextFrame(this.syncTimeout);
+        const { val, body } = this._parse(frame, OP.SYNC);
+        // 真机 ESP32-C5 ROM：value=0x20120707、body=00000000
+        // 模拟设备：value=0、body=0707 1220
+        const magicInValue = val === 0x20120707;
+        const magicInBody = body.length >= 4 && body[0] === 0x07 && body[1] === 0x07 && body[3] === 0x20;
+        if (magicInValue || magicInBody) {
+          this.log(`SYNC 成功（第 ${i + 1} 次尝试）`, 'ok');
+          await this._drain(150);
+          return true;
+        }
+        this.log(`SYNC 响应形状异常（value=0x${val.toString(16)}），重试 ${i + 1}/${attempts}`, 'warn');
+      } catch (e) {
+        this.log(`SYNC 失败 ${i + 1}/${attempts}：${e.message}`, 'warn');
+      }
+    }
+    throw new Error('SYNC 失败：设备无响应（按住 BOOT 再点 RST 后重试）');
+  }
+
+  /** 丢掉线上残留帧（真 ROM 会为每个 SYNC 各回一帧，握手后会剩一堆迟到的 ack） */
+  async _drain(ms = 120) {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+      try {
+        const chunk = await this.transport.read(Math.max(1, deadline - Date.now()));
+        if (chunk && chunk.length) this.decoder.push(chunk);
+        else break;
+      } catch {
+        break;
+      }
+    }
+    this.queue = [];
+    this.decoder.reset();
+  }
+
+  /**
+   * 从 flash 读回数据（ROM 0x10）。用来做"写完再读回来比对"，不依赖 MD5（部分 ROM 不回 MD5）。
+   * 协议：先发命令（addr, size, 0, 0），ROM 先回一个 ack 帧，随后按包回 0x01 0x10 <len> <seq> + 数据。
+   */
+  async readFlash(addr, size, opts = {}) {
+    const payload = new Uint8Array(16);
+    const dv = new DataView(payload.buffer);
+    dv.setUint32(0, addr, true);
+    dv.setUint32(4, size, true);
+    const packetTimeout = opts.timeout ?? this.timeout;
+    await this.transport.write(buildCommand(OP.READ_FLASH, payload));
+
+    const out = new Uint8Array(size);
+    let got = 0;
+    const deadline = Date.now() + Math.max(packetTimeout, 5000) + Math.ceil(size / 1024) * 60;
+    let ackSeen = false;
+    while (got < size) {
+      if (this.aborted) throw new Error('ABORT: 已取消');
+      const remain = Math.max(200, deadline - Date.now());
+      const frame = await this._nextFrame(remain);
+      if (frame.length < 8) continue;
+      if (frame[0] !== DIR.RESPONSE) throw new Error(`读 flash 响应方向非法：0x${frame[0].toString(16)}`);
+      const len = frame[2] | (frame[3] << 8);
+      const body = frame.slice(8, 8 + len);
+      if (!ackSeen && len === 0) { ackSeen = true; continue; }  // 首帧 ack
+      if (len > 0) {
+        out.set(body.subarray(0, Math.min(body.length, size - got)), got);
+        got += body.length;
+      }
+    }
+    return out;
+  }
+
+  /** 切波特率（ROM 0x0F）：先按旧波特率回 ack，再切本地串口 */
+  async changeBaud(baud) {
+    if (typeof this.transport.setBaud !== 'function') return false;
+    const p = new Uint8Array(8);
+    new DataView(p.buffer).setUint32(0, baud, true);
+    await this.command(OP.CHANGE_BAUD, p, { timeout: 3000 });
+    await this.transport.setBaud(baud);
+    await new Promise((r) => setTimeout(r, 60));
+    await this._drain(120);
+    this.log(`已把链路切到 ${baud} bps`, 'ok');
+    return true;
+  }
+
+  /** 让硬件进下载模式：只有真实串口（WebSerialTransport）才有这套控制线 */
+  async enterDownloadMode() {
+    if (typeof this.transport.enterBootloader !== 'function') return null;
+    const mode = await this.transport.enterBootloader({ log: this.log });
+    this.log(`已下发自动复位序列（${mode}），等芯片进下载模式…`, 'ok');
+    await new Promise((r) => setTimeout(r, 150));
+    // 原生 USB Serial/JTAG 复位后 USB 会重新枚举，旧句柄直接作废
+    // （表现得就像 "the device has been lost"），必须重新取端口再打开。
+    if (this.transport.isNativeUsb && typeof this.transport.waitForReenumeration === 'function') {
+      const ok = await this.transport.waitForReenumeration({ log: this.log, timeoutMs: 5000 });
+      if (!ok) {
+        const err = new Error(
+          'USB 重新枚举后没能重新打开串口（原生 USB 口复位后句柄会失效）。'
+          + '把杜邦线/数据线插到板子上另一个 USB 口（CH343 那个，会枚举成 COM3）再试；'
+          + '或者在「连接」里重新点一次，选新的 COM4。',
+        );
+        err.code = 'lost';
+        throw err;
+      }
+    }
+    this.transport.flush?.();
+    return mode;
+  }
+
+  /**
+   * 整片写入。
+   * @param {object} o
+   * @param {Uint8Array} o.image  合并后的整片镜像
+   * @param {number} o.offset     flash 起始地址，整片镜像默认 0x0
+   * @param {number} o.blockSize  每包数据大小，ROM 加载器默认 0x400
+   * @param {boolean} o.autoReset 真机先用 DTR/RTS 自动进下载模式（模拟设备忽略）
+   * @param {(p:{sent:number,total:number,percent:number,seq:number,blocks:number})=>void} o.onProgress
+   */
+  async flash(o) {
+    const {
+      image, offset = 0, blockSize = 0x400,
+      onProgress = () => {}, compact = true, autoReset = true,
+    } = o;
+
+    if (!image || !image.length) throw new Error('镜像为空');
+    if (autoReset) await this.enterDownloadMode();
+    await this.sync();
+
+    const total = image.length;
+    const blocks = Math.ceil(total / blockSize);
+    const eraseSize = Math.ceil(total / 0x1000) * 0x1000;
+
+    this.log(`FLASH_BEGIN  size=${total}  blocks=${blocks}  offset=${toHex(offset)}  erase=${eraseSize}`, 'info');
+    const begin = new Uint8Array(16);
+    const dv = new DataView(begin.buffer);
+    dv.setUint32(0, total, true);
+    dv.setUint32(4, blocks, true);
+    dv.setUint32(8, blockSize, true);
+    dv.setUint32(12, offset, true);
+    const t0 = Date.now();
+    // 擦除是逐 4 KB 扇区做的：整片 3.93 MB 要擦 ~1000 个扇区，超时得按扇区数放大，
+    // 否则默认 15 s 会在整片固件上直接报 TIMEOUT（看起来像"烧不动"）。
+    const beginTimeout = Math.max(this.timeout, 15000, Math.ceil(eraseSize / 0x1000) * 90);
+    await this.command(OP.FLASH_BEGIN, begin, { timeout: beginTimeout });
+
+    let sent = 0;
+    for (let seq = 0; seq < blocks; seq++) {
+      if (this.aborted) throw new Error('ABORT: 已取消');
+      const start = seq * blockSize;
+      const slice = image.subarray(start, Math.min(start + blockSize, total));
+      const data = padTo(slice, 4, 0x00);   // 数据本身 4 字节对齐（不足补 0）
+      const block = padTo(data, blockSize, 0xff); // 最后一块补齐 blockSize，与 esptool 一致
+
+      const pkt = new Uint8Array(16 + block.length);
+      const pv = new DataView(pkt.buffer);
+      pv.setUint32(0, block.length, true);
+      pv.setUint32(4, seq, true);
+      pv.setUint32(8, 0, true);
+      pv.setUint32(12, 0, true);
+      pkt.set(block, 16);
+
+      await this.command(OP.FLASH_DATA, pkt, { timeout: Math.max(this.timeout, 12000) });
+
+      sent += slice.length;
+      const elapsed = (Date.now() - t0) / 1000;
+      onProgress({
+        sent, total, blocks, seq: seq + 1,
+        percent: Math.round((sent / total) * 1000) / 10,
+        bps: elapsed > 0 ? sent / elapsed : 0,
+        eta: elapsed > 0 && sent > 0 ? ((total - sent) / (sent / elapsed)) : 0,
+      });
+    }
+
+    this.log(`FLASH_END  ${compact ? '复位并运行' : '停留在下载模式'}`, 'info');
+    const end = new Uint8Array(4);
+    new DataView(end.buffer).setUint32(0, compact ? 1 : 0, true);
+    await this.command(OP.FLASH_END, end, { timeout: Math.max(this.timeout, 15000) });
+    return { total, blocks, seconds: (Date.now() - t0) / 1000 };
+  }
+}
+
+
+/* ===== src/transport-web.js ===== */
+// 真实硬件的传输层：Web Serial（Chrome / Edge，必须 https 或 localhost）
+// 与 MockRom 暴露同一套接口：write / read / close
+
+class WebSerialTransport {
+  static supported() {
+    return typeof navigator !== 'undefined' && 'serial' in navigator;
+  }
+
+  constructor(port, opts = {}) {
+    this.port = port;
+    this.baudRate = opts.baudRate ?? 460800;
+    this.onLog = opts.onLog ?? (() => {});
+    this.chunks = [];
+    this.waiters = [];
+    this.reader = null;
+    this.closed = false;
+  }
+
+  /** USB 描述信息：VID/PID，用来区分 CH343 桥 和 芯片原生 USB Serial/JTAG */
+  get info() {
+    try { return this.port.getInfo?.() ?? {}; } catch { return {}; }
+  }
+
+  get isNativeUsb() {
+    return this.info.usbVendorId === 0x303a;
+  }
+
+  describe() {
+    const i = this.info;
+    if (!i.usbVendorId) return '未知端口';
+    const vid = i.usbVendorId.toString(16).toUpperCase().padStart(4, '0');
+    const pid = (i.usbProductId ?? 0).toString(16).toUpperCase().padStart(4, '0');
+    const kind = i.usbVendorId === 0x1a86 ? 'WCH 串口桥'
+      : i.usbVendorId === 0x303a ? '乐鑫原生 USB Serial/JTAG'
+        : i.usbVendorId === 0x10c4 ? 'CP210x 桥'
+          : i.usbVendorId === 0x0403 ? 'FTDI 桥' : '其它';
+    return `VID_${vid}&PID_${pid}（${kind}）`;
+  }
+
+  /** 直接操控 DTR / RTS 两根控制线 */
+  async setSignals({ dtr, rts }) {
+    const s = {};
+    if (typeof dtr === 'boolean') s.dataTerminalReady = dtr;
+    if (typeof rts === 'boolean') s.requestToSend = rts;
+    await this.port.setSignals(s);
+  }
+
+  /**
+   * 自动进入下载模式。
+   * CH343 / CH340 / CP210x 这类桥的自动复位电路：DTR→IO0(BOOT)，RTS→EN(RST)，
+   * 顺序与 esptool 的 ClassicReset 一致。芯片原生 USB-Serial-JTAG 用另一套序列。
+   */
+  async enterBootloader({ log = () => {}, swap = false } = {}) {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    if (this.isNativeUsb) {
+      log('原生 USB Serial/JTAG：用 USB 方式复位', 'info');
+      await this.setSignals({ dtr: false, rts: false });
+      await sleep(100);
+      await this.setSignals({ dtr: true, rts: false });
+      await sleep(100);
+      await this.setSignals({ dtr: false, rts: true });
+      await sleep(100);
+      await this.setSignals({ dtr: false, rts: false });
+      await sleep(120);
+      return 'usb-jtag';
+    }
+    // 经典序列：IO0=HIGH / EN=LOW → IO0=LOW / EN=HIGH → 都松开
+    // swap=true 时把 DTR/RTS 的角色对调 —— 有些板子把 IO0 接到 RTS、EN 接到 DTR
+    const io0 = swap ? 'rts' : 'dtr';
+    const en = swap ? 'dtr' : 'rts';
+    const sig = (io0v, env) => ({ [io0]: io0v, [en]: env });
+    await this.setSignals(sig(false, true));   // EN=LOW，芯片进入复位
+    await sleep(120);
+    await this.setSignals(sig(true, false));   // IO0=LOW，EN=HIGH，复位释放
+    await sleep(60);
+    await this.setSignals(sig(false, false));  // IO0=HIGH，收尾
+    await sleep(80);
+    log(`复位序列已发出（${swap ? 'classic-swapped' : 'classic'}）`, 'info');
+    return swap ? 'classic-swapped' : 'classic';
+  }
+
+  async open() {
+    await this.port.open({ baudRate: this.baudRate, bufferSize: 65536, flowControl: 'none' });
+    this.reader = this.port.readable.getReader();
+    this._loop();
+  }
+
+  async _loop() {
+    try {
+      for (;;) {
+        const { value, done } = await this.reader.read();
+        if (done) break;
+        if (value && value.length) this._push(value);
+      }
+    } catch (e) {
+      if (!this.closed) this.onLog(`串口读循环结束：${e.message}`, 'warn');
+    }
+  }
+
+  _push(chunk) {
+    const w = this.waiters.shift();
+    if (w) w.resolve(chunk);
+    else this.chunks.push(chunk);
+  }
+
+  /** 丢掉复位瞬间的启动日志噪声，避免被当成响应帧 */
+  flush() {
+    this.chunks.length = 0;
+  }
+
+  read(timeoutMs) {
+    if (this.chunks.length) return Promise.resolve(this.chunks.shift());
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.waiters = this.waiters.filter((w) => w.timer !== timer);
+        reject(new Error('TIMEOUT'));
+      }, timeoutMs);
+      this.waiters.push({ resolve, timer });
+    });
+  }
+
+  async write(bytes) {
+    if (this.closed) {
+      const e = new Error('串口已关闭（可能刚被复位/释放），重新点"连接"');
+      e.code = 'lost';
+      throw e;
+    }
+    const writable = this.port?.writable;
+    if (!writable) {
+      const e = new Error('串口已失效：设备复位后 USB 重新枚举，旧句柄作废');
+      e.code = 'lost';
+      throw e;
+    }
+    const writer = writable.getWriter();
+    try {
+      await writer.write(bytes);
+    } finally {
+      writer.releaseLock();
+    }
+  }
+
+  /**
+   * 原生 USB Serial/JTAG 复位后会重新枚举：等端口回来，重新打开同一个设备。
+   * 成功返回 true；超时返回 false（调用方给出"换 CH343 口"之类的提示）。
+   */
+  async waitForReenumeration({ log = () => {}, timeoutMs = 5000 } = {}) {
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const vid = this.info.usbVendorId;
+    const pid = this.info.usbProductId;
+    const oldPort = this.port;
+
+    // 先把旧句柄彻底放下，否则新实例 open() 会撞 "already open"
+    this.closed = true;
+    try { await this.reader?.cancel(); } catch {}
+    try { this.reader?.releaseLock?.(); } catch {}
+    this.reader = null;
+    try { await oldPort?.close(); } catch {}
+    this.chunks.length = 0;
+    this.waiters.length = 0;
+
+    if (typeof navigator === 'undefined' || !navigator.serial?.getPorts) return false;
+
+    const t0 = Date.now();
+    let announced = false;
+    while (Date.now() - t0 < timeoutMs) {
+      await sleep(150);
+      let ports = [];
+      try { ports = await navigator.serial.getPorts(); } catch { ports = []; }
+      const same = (p) => {
+        try {
+          const i = p.getInfo?.() ?? {};
+          return i.usbVendorId === vid && i.usbProductId === pid;
+        } catch { return false; }
+      };
+      // 优先挑一个"和旧句柄不同的实例"，那就是重新枚举出来的新设备；
+      // 等 1.5 秒还没有新实例，才退回尝试复用旧实例（有些系统枚举不变）。
+      const fresh = ports.find((p) => p !== oldPort && same(p));
+      const cand = fresh || (Date.now() - t0 > 1500 ? ports.find(same) : undefined);
+      if (!cand) continue;
+      try {
+        this.port = cand;
+        await this.port.open({ baudRate: this.baudRate, bufferSize: 65536, flowControl: 'none' });
+        this.reader = this.port.readable.getReader();
+        this.closed = false;
+        this._loop();
+        log(`设备已重新枚举并重新打开（${this.describe()}）`, 'ok');
+        return true;
+      } catch (e) {
+        // 端口刚出现时可能还没就绪（Windows 驱动仍在装），继续等
+        if (!announced) { log(`等待设备重新就绪：${e?.message || e}`, 'info'); announced = true; }
+        try { await this.port?.close(); } catch {}
+      }
+    }
+    log(`等了 ${Math.round(timeoutMs / 1000)} 秒，设备没有重新出现`, 'err');
+    return false;
+  }
+
+  /** 换波特率重开端口（Web Serial 不能热改，只能关掉重开） */
+  async reopen(baudRate) {
+    const prev = this.baudRate;
+    try { await this.reader?.cancel(); } catch {}
+    try { this.reader?.releaseLock?.(); } catch {}
+    this.reader = null;
+    try { await this.port.close(); } catch {}
+    this.chunks.length = 0;
+    this.waiters.length = 0;
+    this.closed = false;
+    this.baudRate = baudRate;
+    await this.open();
+    return prev;
+  }
+
+  async close() {
+    this.closed = true;
+    try { await this.reader?.cancel(); } catch {}
+    try { await this.port.close(); } catch {}
+  }
+}
+
+/** 页面是否被嵌在 iframe / 侧边栏面板里（Web Serial 的串口弹窗在这种环境必被拦） */
+function isEmbedded() {
+  try {
+    return typeof window !== 'undefined' && window.self !== window.top;
+  } catch {
+    return true; // 跨源窗口取 top 会抛，说明确实在 iframe 里
+  }
+}
+
+/** 向用户要一个串口（必须由点击事件触发） */
+async function requestPort() {
+  if (!WebSerialTransport.supported()) {
+    throw new Error('当前浏览器不支持 Web Serial（请用 Chrome / Edge 92+，并打开 https 或 localhost）');
+  }
+  if (isEmbedded()) {
+    // iframe 里 requestPort() 要么直接抛 SecurityError，要么弹窗一闪就被取消，
+    // 表现就是"点了没反应 / 弹窗被取消"。提前给出可执行的说法。
+    const err = new Error('页面被嵌在 iframe 里，浏览器不允许弹串口选择框');
+    err.code = 'embedded';
+    throw err;
+  }
+  try {
+    return await navigator.serial.requestPort();
+  } catch (e) {
+    const name = String(e?.name || '');
+    const msg = String(e?.message || e);
+    const err = new Error(msg || name || '串口选择被取消');
+    // NotFoundError / AbortError = 用户把弹窗关了；SecurityError / NotAllowedError = 浏览器或策略直接拒绝
+    err.code = /Security|NotAllowed|InvalidState/i.test(name) || /denied|permission|sandbox|gesture/i.test(msg)
+      ? 'denied'
+      : 'canceled';
+    throw err;
+  }
+}
+
+
+/* ===== standalone/app.js ===== */
+
+/* standalone/app.js */
+/* standalone/app.js */
+
+const $ = (id) => document.getElementById(id);
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const S = {
+  transport: null,
+  loader: null,
+  image: null,
+  name: '',
+  connected: false,
+  busy: false,
+  demo: false,
+  lastFlash: null,
+};
+
+/* ---------------- 日志 ---------------- */
+
+function ts() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+function log(text, kind = 'info') {
+  const box = $('log');
+  const line = document.createElement('div');
+  const t = document.createElement('span');
+  t.className = 't';
+  t.textContent = ts() + '  ';
+  const body = document.createElement('span');
+  body.className = kind;
+  body.textContent = String(text);
+  line.append(t, body);
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+  while (box.childNodes.length > 600) box.removeChild(box.firstChild);
+}
+
+/* ---------------- 顶部状态 ---------------- */
+
+function tag(id, text, kind) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'tag' + (kind ? ' ' + kind : '');
+}
+
+function banner(text, kind = 'err', html = false) {
+  const el = $('banner');
+  if (!text) { el.hidden = true; return; }
+  el.hidden = false;
+  el.dataset.kind = kind;
+  if (html) el.innerHTML = text; else el.textContent = text;
+}
+
+function boot() {
+  const hasSerial = typeof navigator !== 'undefined' && 'serial' in navigator;
+  const secure = window.isSecureContext;
+  const embedded = isEmbedded();
+  const ua = navigator.userAgent;
+  const isChromish = /Chrome|Edg|Chromium/i.test(ua);
+
+  tag('tag-serial', hasSerial ? 'Web Serial 可用' : '没有 Web Serial', hasSerial ? 'good' : 'bad');
+  tag('tag-secure', secure ? '安全上下文 OK' : '不是安全上下文', secure ? 'good' : 'bad');
+  tag('tag-browser', isChromish ? 'Chrome / Edge' : '不是 Chrome 内核', isChromish ? 'good' : 'bad');
+
+  document.documentElement.dataset.ready = 'ok';
+  document.documentElement.dataset.serial = hasSerial ? 'yes' : 'no';
+  document.documentElement.dataset.secure = secure ? 'yes' : 'no';
+  document.documentElement.dataset.embedded = embedded ? 'yes' : 'no';
+  document.documentElement.dataset.flash = 'idle';
+
+  if (!hasSerial) {
+    banner('这个浏览器没有 Web Serial。请用 <b>Chrome</b> 或 <b>Edge</b>（版本 89+）打开本文件：右键这个文件 → 打开方式 → Chrome。', 'err', true);
+  } else if (embedded) {
+    banner('页面被嵌在别的窗口里，浏览器不会允许弹出串口选择框。请把这个文件单独在浏览器里打开（地址栏应该是 file:///…）。', 'err', true);
+  } else if (!isChromish) {
+    banner('当前不是 Chrome 内核浏览器，串口可能不可用。建议用 Chrome / Edge 打开。', 'warn');
+  } else if (S.demo) {
+    banner('演示模式：不连真硬件，用内置的模拟芯片跑一遍完整流程（只用于试界面）。', 'warn');
+  } else {
+    banner('');
+  }
+
+  log(`就绪：串口 ${hasSerial ? '可用' : '不可用'} · 安全上下文 ${secure ? '是' : '否'} · ${isChromish ? 'Chrome 内核' : '非 Chrome 内核'}`);
+  log('先在「1 连接开发板」里点连接，再在「2」选 .bin，最后点「3 开始烧录」。');
+  if (S.demo) log('已开启 ?demo=1：连接时会使用模拟芯片（写入只在内存里）。', 'warn');
+}
+
+/* ---------------- 串口连接 ---------------- */
+
+function mapConnectError(e) {
+  const code = e?.code;
+  const msg = String(e?.message || e);
+  if (code === 'embedded') return '页面在 iframe 里，串口弹窗被浏览器拦了。单独用浏览器打开本文件再试。';
+  if (code === 'denied') return `浏览器拒绝了串口访问：${msg}（检查地址栏左侧的权限图标，允许串口）`;
+  if (code === 'canceled') return '没有选择端口（弹窗被取消了）。再点一次连接，在弹窗里选那个 CH343 / USB 串行设备。';
+  if (/No port selected/i.test(msg)) return '没有选择端口（弹窗被取消了）。';
+  if (/access denied|拒绝访问|Failed to open|busy|in use/i.test(msg)) {
+    return '打开串口失败：被别的程序占着。关掉串口助手（sscom / XCOM）、Arduino 串口监视器、其它浏览器标签页，然后再点连接。';
+  }
+  return msg;
+}
+
+async function connect() {
+  if (S.busy) return;
+  if (S.connected) { log('已经连着了。要换端口先点断开。', 'warn'); return; }
+  const baud = Number($('baud').value);
+  try {
+    let transport;
+    if (S.demo) {
+      transport = new DemoTransport({ baudRate: baud, onLog: log });
+      log('演示模式：使用内置模拟芯片（不会访问真实串口）', 'warn');
+    } else {
+      const port = await requestPort();
+      transport = new WebSerialTransport(port, { baudRate: baud, onLog: log });
+    }
+    await transport.open();
+    S.transport = transport;
+    S.connected = true;
+    S.nativeUsb = !!transport.isNativeUsb;
+    $('port-info').textContent = `端口：${transport.describe()} @ ${transport.baudRate}`;
+    document.documentElement.dataset.connected = '1';
+    document.documentElement.dataset.nativeusb = S.nativeUsb ? '1' : '0';
+    $('btn-connect').disabled = true;
+    $('btn-disconnect').disabled = false;
+    $('btn-connect').textContent = '已连接';
+    log(`串口已打开：${transport.describe()} @ ${transport.baudRate}`, 'ok');
+
+    if (S.nativeUsb) {
+      const t = '注意：这个口是芯片的原生 USB（VID 303A）。浏览器没法通过它复位芯片进下载模式 —— '
+        + '要么改用板上 CH343 那个口（VID 1A86，能自动复位），要么手按 BOOT → 点一下 RST → 松开 BOOT，再点「开始烧录」。';
+      log(t, 'warn');
+      banner(t, 'warn');
+    }
+
+    if ($('autoreset').checked) {
+      if (S.nativeUsb) {
+        log('原生 USB 口：跳过自动复位（DTR/RTS 到不了 EN/BOOT），请手按 BOOT+RST。', 'warn');
+        document.documentElement.dataset.bootmode = 'usb-jtag-manual';
+      } else {
+        try {
+          const mode = await transport.enterBootloader({ log });
+          log(`已下发自动复位序列（${mode}），芯片应进入下载模式`, 'ok');
+          document.documentElement.dataset.bootmode = mode;
+        } catch (e) {
+          log(`自动复位失败：${e.message}（可以手按 BOOT 再点 RST）`, 'warn');
+        }
+      }
+    }
+    await sniffPort(700);
+  } catch (e) {
+    const text = mapConnectError(e);
+    log(text, 'err');
+    banner(text, 'err');
+    try { await S.transport?.close(); } catch {}
+    S.transport = null;
+    S.connected = false;
+  }
+}
+
+async function disconnect() {
+  if (S.busy) { log('正在烧录，等它结束或先点中止。', 'warn'); return; }
+  try { await S.transport?.close(); } catch {}
+  S.transport = null;
+  S.loader = null;
+  S.connected = false;
+  document.documentElement.dataset.connected = '0';
+  $('port-info').textContent = '端口：未连接';
+  $('btn-connect').disabled = false;
+  $('btn-disconnect').disabled = true;
+  $('btn-connect').textContent = '选择串口并连接';
+  log('串口已释放（下次点连接如果报"拒绝访问"，说明刚才没释放干净，重插 USB 即可）', 'info');
+}
+
+/* ---------------- 固件选择 ---------------- */
+
+function fmtBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+  return (n / 1024 / 1024).toFixed(2) + ' MB';
+}
+
+function hex32(n) { return '0x' + (n >>> 0).toString(16); }
+
+async function sha256(bytes) {
+  if (window.crypto?.subtle) {
+    const buf = await crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
+  return '(这个浏览器不支持 crypto.subtle)';
+}
+
+/** 判断镜像是整片合并包还是单个 app：返回 { offset, note } */
+function guessOffset(bytes) {
+  if (bytes[0] === 0xe9) {
+    return { offset: 0x10000, note: '这是单个 app 镜像（首字节 0xE9），默认写 0x10000。' };
+  }
+  let first = -1;
+  for (let i = 0; i < bytes.length; i++) if (bytes[i] !== 0xff) { first = i; break; }
+  if (first === 0x2000 || first === 0x0) {
+    return { offset: 0x0, note: `这是整片合并镜像（第一个有效数据在 ${hex32(first)}），写 0x0。` };
+  }
+  if (first < 0) return { offset: 0x0, note: '整个文件都是 0xFF，可能选错文件了。' };
+  return { offset: 0x0, note: `第一个有效数据在 ${hex32(first)}，看起来不是标准 C5 镜像，地址先按 0x0 处理。` };
+}
+
+async function loadFile(file) {
+  if (!file) return;
+  if (!/\.bin$/i.test(file.name)) {
+    log(`「${file.name}」不是 .bin，仍然尝试读取`, 'warn');
+  }
+  try {
+    const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
+    S.image = bytes;
+    S.name = file.name;
+    const g = guessOffset(bytes);
+    $('meta-name').textContent = file.name;
+    $('meta-size').textContent = `${fmtBytes(bytes.length)}（${bytes.length} B）`;
+    $('meta-sha').textContent = '计算中…';
+    $('offset').value = hex32(g.offset);
+    $('offset-hint').textContent = g.note;
+    document.documentElement.dataset.file = file.name;
+    document.documentElement.dataset.offset = hex32(g.offset);
+    log(`已载入 ${file.name}（${fmtBytes(bytes.length)}）→ 地址 ${hex32(g.offset)}`, 'ok');
+    const h = await sha256(bytes);
+    $('meta-sha').textContent = h;
+    document.documentElement.dataset.sha = h;
+  } catch (e) {
+    log(`读取文件失败：${e.message}`, 'err');
+  }
+}
+
+function parseOffset(text) {
+  const s = String(text || '').trim().toLowerCase();
+  if (!s) return 0;
+  if (/^0x[0-9a-f]+$/.test(s)) return parseInt(s, 16);
+  if (/^[0-9]+$/.test(s)) return parseInt(s, 10);
+  if (/^[0-9a-f]+$/.test(s)) return parseInt(s, 16);
+  return NaN;
+}
+
+/* ---------------- 烧录 ---------------- */
+
+function setProgress(p) {
+  $('bar').style.width = p.percent + '%';
+  $('st-pct').textContent = p.percent.toFixed(1) + ' %';
+  $('st-rate').textContent = (p.bps / 1024).toFixed(1) + ' KB/s';
+  $('st-sent').textContent = `${fmtBytes(p.sent)} / ${fmtBytes(p.total)}`;
+  $('st-pkt').textContent = `${p.seq} / ${p.blocks}`;
+  $('st-eta').textContent = p.eta > 0 ? `${Math.ceil(p.eta)} s` : '—';
+}
+
+function resetProgress() {
+  $('bar').style.width = '0%';
+  $('st-pct').textContent = '0.0 %';
+  $('st-rate').textContent = '—';
+  $('st-sent').textContent = '0 B';
+  $('st-pkt').textContent = '0 / 0';
+  $('st-eta').textContent = '—';
+}
+
+function flashHint(msg) {
+  const m = String(msg || '');
+  if (/TIMEOUT|SYNC/i.test(m)) {
+    return '握手失败（SYNC 没回包）。① 勾着"自动进下载模式"就别手按 BOOT；② 按 BOOT → 点 RST → 松 BOOT 再点开始；③ TX/RX 两根都要接；④ 波特率降到 115200 再试。';
+  }
+  if (/校验|checksum|0xc1/i.test(m)) {
+    return '数据校验和不对。多半是线太长/接触不良，或者这个波特率撑不住 → 降到 460800 / 115200 重试。';
+  }
+  if (/ABORT/i.test(m)) return '已手动中止。芯片里是烧了一半的固件，重新烧一遍即可。';
+  if (/lost|失效|重新枚举/i.test(m)) {
+    return '串口句柄失效（芯片复位后 USB 重新枚举了）。拔插一次 USB，重新点连接再烧。';
+  }
+  return m;
+}
+
+/** 听一小段串口，判断芯片现在是在跑应用、还是已经在下载模式 / 完全没动静 */
+async function sniffPort(ms = 700) {
+  const t = S.transport;
+  if (!t) return { kind: 'no-transport', bytes: 0 };
+  let buf = [];
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    try {
+      const chunk = await t.read(Math.max(60, deadline - Date.now()));
+      if (chunk && chunk.length) buf.push(...chunk);
+    } catch {
+      break;
+    }
+  }
+  const text = String.fromCharCode(...buf.filter((b) => b > 8 && b < 127));
+  const n = buf.length;
+  const waiting = /waiting for download/i.test(text);
+  const rom = /ESP-ROM/i.test(text);
+  let kind = 'silent';
+  if (waiting) kind = 'download-mode';
+  else if (rom) kind = 'rom-boot';
+  else if (n) kind = 'app-running';
+  const labels = {
+    'download-mode': `芯片已在下载模式（收到 ${n} B，含 "waiting for download"）`,
+    'rom-boot': `芯片刚复位、在 ROM 阶段（收到 ${n} B，含 "ESP-ROM"），可以直接烧`,
+    'app-running': `收到 ${n} B 但不是 ROM 提示 —— 芯片还在跑原来的固件，没进下载模式`,
+    silent: '串口完全静默（0 字节）：芯片没复位、或 TX 没接到',
+    'no-transport': '没连串口，无法判断',
+  };
+  const msg = labels[kind];
+  log(`端口探测：${msg}`, kind === 'download-mode' || kind === 'rom-boot' ? 'ok' : 'warn');
+  document.documentElement.dataset.sniff = kind;
+  return { kind, bytes: n };
+}
+
+async function flash() {
+  if (S.busy) return;
+  if (!S.image) { banner('还没选固件：先在「2」里选一个 .bin。', 'warn'); log('还没选固件', 'warn'); return; }
+  if (!S.transport) { banner('还没连串口：先在「1」里点"选择串口并连接"。', 'warn'); log('还没连串口', 'warn'); return; }
+  const offset = parseOffset($('offset').value);
+  if (Number.isNaN(offset)) { banner('烧录地址不对：写 0x0 或 0x10000 这样的值。', 'err'); return; }
+
+  S.busy = true;
+  banner('');
+  document.documentElement.dataset.flash = 'running';
+  $('btn-flash').disabled = true;
+  $('btn-abort').disabled = false;
+  $('btn-connect').disabled = true;
+  $('btn-disconnect').disabled = true;
+  resetProgress();
+
+  try {
+    await runFlash(offset, 'swap');
+  } finally {
+    S.busy = false;
+    S.loader = null;
+    $('btn-flash').disabled = false;
+    $('btn-abort').disabled = true;
+    $('btn-disconnect').disabled = false;
+    if (S.connected) $('btn-connect').disabled = true;
+    document.documentElement.dataset.last = S.lastFlash || 'none';
+  }
+}
+
+/** 真正烧一次；SYNC 没回包时自动探测端口状态，必要时降速重试一次 */
+async function runFlash(offset, allowRetry) {
+  log(`开始烧录：${S.name} → ${hex32(offset)}，共 ${fmtBytes(S.image.length)}（${S.transport.baudRate} bps）`);
+  const loader = new EspLoader(S.transport, { log });
+  S.loader = loader;
+  const t0 = Date.now();
+  try {
+    const r = await loader.flash({
+      image: S.image,
+      offset,
+      autoReset: $('autoreset').checked,
+      compact: $('run').checked,
+      onProgress: setProgress,
+    });
+    const sec = ((Date.now() - t0) / 1000).toFixed(1);
+    S.lastFlash = 'ok';
+    document.documentElement.dataset.flash = 'ok';
+    log(`烧录完成：${r.blocks} 个包、${fmtBytes(r.total)}，用时 ${sec} s`, 'ok');
+    if ($('run').checked) log('已发复位命令，芯片开始运行新固件。', 'ok');
+    banner('烧录成功。芯片已复位运行新固件。', 'ok');
+    return;
+  } catch (e) {
+    const m = e?.message || String(e);
+    const syncFail = /TIMEOUT|SYNC/i.test(m);
+
+    if (syncFail && allowRetry !== 'none') {
+      log('SYNC 没回包，先看芯片现在到底在什么状态…', 'warn');
+      const info = await sniffPort(700);
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+      // 阶段 1：换一套复位极性（有些板子把 IO0 接 RTS、EN 接 DTR）
+      if (!S.nativeUsb && allowRetry === 'swap') {
+        log('换一套 DTR/RTS 极性复位再试一次…', 'warn');
+        try {
+          await S.transport.enterBootloader({ log, swap: true });
+          S.transport.flush?.();
+          await wait(150);
+          await runFlash(offset, 'baud');
+          return;
+        } catch (e2) {
+          log(`换极性复位失败：${e2.message}`, 'warn');
+        }
+      }
+
+      // 阶段 2：降速
+      const baud = S.transport?.baudRate || 0;
+      if (baud > 115200) {
+        log(`再把波特率降到 115200 试一次（原来 ${baud}）…`, 'warn');
+        try {
+          await S.transport.reopen(115200);
+          $('baud').value = '115200';
+          document.documentElement.dataset.baud = '115200';
+          await runFlash(offset, 'none');
+          return;
+        } catch (e2) {
+          log(`降速重开失败：${e2.message}`, 'err');
+        }
+      }
+
+      // 阶段 3：给结论
+      let tip;
+      if (info.kind === 'app-running') {
+        tip = S.nativeUsb
+          ? '芯片还在跑固件，而且你连的是原生 USB 口（VID 303A）—— 这个口浏览器复位不了。按住 BOOT → 点一下 RST → 松开 BOOT，再点一次开始烧录；或改用板上 CH343 那个口。'
+          : '芯片还在跑固件，自动复位没生效。按住 BOOT → 点一下 RST → 松开 BOOT，再点一次开始烧录（或把「自动进下载模式」勾着重新连接）。';
+      } else if (info.kind === 'silent') {
+        tip = '串口一个字节都没收到：确认线是数据线（能传数据）、TX/RX 都接好、板子有供电；然后按住 BOOT 点一下 RST，再试。';
+      } else if (info.kind === 'download-mode') {
+        tip = '芯片已经在下载模式，但握手还是超时 —— 多半是这个波特率撑不住或 TX 接触不良。降到 115200 再试，或换根短线。';
+      } else {
+        tip = flashHint(m);
+      }
+      S.lastFlash = 'fail';
+      document.documentElement.dataset.flash = 'fail';
+      log(tip, 'err');
+      banner(tip, 'err');
+      return;
+    }
+
+    const text = flashHint(m);
+    S.lastFlash = 'fail';
+    document.documentElement.dataset.flash = 'fail';
+    log(text, 'err');
+    banner(text, 'err');
+  }
+}
+
+function abort() {
+  if (!S.loader) return;
+  log('正在中止…', 'warn');
+  S.loader.abort();
+}
+
+/* ---------------- 演示用的模拟芯片（?demo=1） ---------------- */
+
+class DemoTransport {
+  constructor(opts = {}) {
+    this.baudRate = opts.baudRate || 460800;
+    this.onLog = opts.onLog || (() => {});
+    this.decoder = new SlipDecoder();
+    this.queue = [];
+    this.waiters = [];
+    this.closed = false;
+    this.flash = new Uint8Array(2 * 1024 * 1024).fill(0xff);
+    this.offset = 0;
+    this.size = 0;
+    this.blocks = 0;
+    this.nextSeq = 0;
+    this.bytesWritten = 0;
+  }
+  static supported() { return true; }
+  describe() { return '演示模式（内置模拟 ESP32-C5）'; }
+  get isNativeUsb() { return false; }
+  async open() { this.closed = false; }
+  async reopen(baudRate) {
+    const old = this.baudRate;
+    this.baudRate = baudRate || this.baudRate;
+    return old;
+  }
+  async close() { this.closed = true; }
+  flush() { this.queue.length = 0; }
+  read(timeoutMs) {
+    if (this.queue.length) return Promise.resolve(this.queue.shift());
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.waiters = this.waiters.filter((w) => w.timer !== timer);
+        reject(new Error('TIMEOUT'));
+      }, timeoutMs);
+      this.waiters.push({ resolve, timer });
+    });
+  }
+  _push(bytes) {
+    const w = this.waiters.shift();
+    if (w) { clearTimeout(w.timer); w.resolve(bytes); } else this.queue.push(bytes);
+  }
+  async enterBootloader() { await sleep(60); return 'demo'; }
+  async setSignals() {}
+  async setBaud(b) { this.baudRate = b; }
+
+  _respond(op, value = 0, body = new Uint8Array(0)) {
+    // buildResponse 内部已经做过 SLIP 封装，这里直接推原始字节
+    this._push(buildResponse(op, value, body));
+  }
+
+  async write(bytes) {
+    for (const frame of this.decoder.push(bytes)) {
+      if (frame.length < 8) continue;
+      const dir = frame[0];
+      const op = frame[1];
+      if (dir !== 0x00) continue; // 只处理命令方向（0x00=REQUEST）
+      const len = frame[2] | (frame[3] << 8) | (frame[4] << 16) | (frame[5] << 24);
+      const payload = frame.slice(8, 8 + len);
+      await sleep(0);
+      if (op === OP.SYNC) { this._respond(OP.SYNC, 0x20120707, new Uint8Array(4)); continue; }
+      if (op === OP.FLASH_BEGIN) {
+        const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+        this.size = dv.getUint32(0, true);
+        this.blocks = dv.getUint32(4, true);
+        this.offset = dv.getUint32(12, true);
+        this.nextSeq = 0;
+        this.bytesWritten = 0;
+        this._respond(op);
+        continue;
+      }
+      if (op === OP.FLASH_DATA) {
+        const dv = new DataView(payload.buffer, payload.byteOffset, payload.byteLength);
+        const dataLen = dv.getUint32(0, true);
+        const seq = dv.getUint32(4, true);
+        const data = payload.slice(16, 16 + dataLen);
+        if (seq !== this.nextSeq) { this._respond(op, 0xc2); continue; }
+        this.flash.set(data.subarray(0, dataLen), this.offset + this.bytesWritten);
+        this.bytesWritten += Math.min(dataLen, this.size - this.bytesWritten);
+        this.nextSeq++;
+        this._respond(op);
+        continue;
+      }
+      if (op === OP.FLASH_END) { this._respond(op); continue; }
+      this._respond(op, 0x05);
+    }
+  }
+}
+
+/* ---------------- 事件绑定 ---------------- */
+
+function wire() {
+  $('btn-connect').addEventListener('click', connect);
+  $('btn-disconnect').addEventListener('click', disconnect);
+  $('btn-flash').addEventListener('click', flash);
+  $('btn-abort').addEventListener('click', abort);
+  $('btn-clear').addEventListener('click', () => { $('log').textContent = ''; });
+  $('btn-pick').addEventListener('click', (e) => { e.preventDefault(); $('file').click(); });
+  $('file').addEventListener('change', (e) => loadFile(e.target.files?.[0]));
+  $('drop').addEventListener('dragover', (e) => { e.preventDefault(); $('drop').classList.add('hover'); });
+  $('drop').addEventListener('dragleave', () => $('drop').classList.remove('hover'));
+  $('drop').addEventListener('drop', (e) => {
+    e.preventDefault();
+    $('drop').classList.remove('hover');
+    loadFile(e.dataTransfer?.files?.[0]);
+  });
+  window.addEventListener('pagehide', () => { try { S.transport?.close(); } catch {} });
+}
+
+/* ---------------- 自检（?demo=1&auto=1） ---------------- */
+
+async function selfTest() {
+  // 造一张 256 KB 的图案镜像，走完整的连接 → 烧录 → 回读比对
+  const bytes = new Uint8Array(256 * 1024);
+  for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 31 + 7) & 0xff;
+  bytes[0] = 0xff; bytes[0x2000] = 0xe9; // 伪装成"整片镜像"外形
+  S.image = bytes; S.name = 'selftest.bin';
+  $('meta-name').textContent = S.name;
+  $('meta-size').textContent = fmtBytes(bytes.length);
+  $('meta-sha').textContent = '（内存镜像，未计算）';
+  $('offset').value = '0x0';
+  $('offset-hint').textContent = '自检镜像只在内存里，写 0x0。真烧录时这里会自动判断地址。';
+  log('自检：开始（演示芯片）', 'info');
+  await connect();
+  await flash();
+  const t = S.transport;
+  let same = -1;
+  if (t instanceof DemoTransport) {
+    same = 1;
+    for (let i = 0; i < bytes.length; i++) {
+      if (t.flash[i] !== bytes[i]) { same = 0; break; }
+    }
+  }
+  const result = {
+    connected: S.connected ? 1 : 0,
+    flash: document.documentElement.dataset.flash,
+    readback: same === 1 ? 'pass' : (same === 0 ? 'fail' : 'skip'),
+    bytes: S.image.length,
+  };
+  document.documentElement.dataset.selftest = JSON.stringify(result);
+  document.documentElement.dataset.readback = result.readback;
+  log(`自检结果：${JSON.stringify(result)}`, result.readback === 'pass' ? 'ok' : 'err');
+  if (result.readback !== 'pass') throw new Error('自检失败：回读与写入不一致');
+}
+
+(function main() {
+  const q = new URLSearchParams(location.search);
+  S.demo = q.get('demo') === '1';
+  document.documentElement.dataset.demo = S.demo ? '1' : '0';
+  wire();
+  boot();
+  window.__flasher = { S, log, loadFile, connect, flash, DemoTransport };
+  if (S.demo && q.get('auto') === '1') {
+    selfTest().catch((e) => {
+      document.documentElement.dataset.selftest = 'fail: ' + e.message;
+      log('自检异常：' + e.message, 'err');
+    });
+  }
+})();
+
+})();
+
+</script>
+</body>
+</html>

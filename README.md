@@ -31,6 +31,18 @@
 
 本项目的固件修复了原版在**无屏 ESP32-C5 板子上跑不了 JavaScript 解释器**的三个 bug，并启用了 8MB PSRAM。详见 [源码改动说明.md](源码改动说明.md)。
 
+#### 方式一：网页烧录台（推荐，不用装任何东西）
+
+用 **Chrome 或 Edge** 打开 [`flasher.html`](flasher.html)（或直接双击仓库里的这个文件），然后：
+
+1. 点「选择串口并连接」，选板子对应的 COM 口
+2. 把 `firmware/Bruce-c5-n32r8-chan5g.bin` 拖进「2 选择固件」
+3. 点「开始烧录」
+
+用的是浏览器自带的 **Web Serial API** + 自实现的 ESP ROM 下载协议，固件只在内存里直写芯片，不上传任何服务器。Safari 和 Firefox 不支持 Web Serial。
+
+#### 方式二：命令行
+
 ```powershell
 cd firmware
 python -m esptool --chip esp32c5 -p COM9 -b 921600 write-flash -z `
@@ -38,7 +50,7 @@ python -m esptool --chip esp32c5 -p COM9 -b 921600 write-flash -z `
   0x0 Bruce-c5-n32r8-chan5g.bin
 ```
 
-Windows 用户可以直接双击 `firmware/刷机.bat`。
+Windows 用户也可以直接双击 `firmware/刷机.bat`。
 
 ### 2. 启动界面
 
@@ -58,6 +70,8 @@ python chan5g_gui.py
 ## 仓库结构
 
 ```
+├── index.html               项目落地页（可开 GitHub Pages）
+├── flasher.html             网页烧录台：浏览器直接刷固件，免安装
 ├── 使用说明.md              完整使用文档（11 章，含故障排查 25 条）
 ├── 源码改动说明.md          三个固件 bug 的完整 diff 和编译步骤
 ├── 改信道操作卡.md          分品牌改信道步骤 + 从 MAC 前缀认厂商
